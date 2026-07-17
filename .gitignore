@@ -1,0 +1,25 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local app data generated while using the notebook.
+*.db
+*.sqlite
+*.sqlite3
+life_journal.docx
+completed_tasks_log.docx
+essays_log.docx
+
+# Personal drafts, test files, and local shortcuts.
+*.lnk
+*.pptx
+
+# Local environment and editor files.
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+Thumbs.db
+Desktop.ini
