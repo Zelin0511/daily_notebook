@@ -236,6 +236,13 @@ def now_text():
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def preview_text(text, limit=120):
+    normalized = " ".join((text or "").split())
+    if len(normalized) <= limit:
+        return normalized, ""
+    return normalized[:limit] + "...", normalized
+
+
 def parse_date(value):
     return datetime.strptime(value, "%Y-%m-%d").date()
 
@@ -856,12 +863,12 @@ class SimpleTable(QWidget):
             frame.setProperty("status", row.get("status", ""))
             frame.setCursor(Qt.PointingHandCursor)
             frame.mousePressEvent = lambda event, f=frame: self.select_row(f)
-            frame.setMinimumHeight(58)
             layout = QGridLayout(frame)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
+            details = row.get("details", {})
             for col, value in enumerate(row["values"]):
-                label = ElidedLabel(str(value), self.headers[col], self, frame, lines=2, compact=len(str(value)) <= 24)
+                label = PreviewLabel(str(value), details.get(col, ""), self.headers[col], self, frame)
                 label.setAlignment(Qt.AlignVCenter | (Qt.AlignCenter if col and len(str(value)) <= 22 else Qt.AlignLeft))
                 label.setStyleSheet(
                     "border-right: 1px solid rgba(20, 24, 34, 38);"
@@ -899,65 +906,24 @@ class SimpleTable(QWidget):
             frame.setStyleSheet(f"QFrame {{ background: {background}; }} QLabel {{ color: {color}; }}")
 
 
-class ElidedLabel(QLabel):
-    def __init__(self, full_text, detail_title, table, row_frame, lines=2, compact=False):
-        super().__init__()
-        self.full_text = full_text or ""
+class PreviewLabel(QLabel):
+    def __init__(self, preview_text, detail_text, detail_title, table, row_frame):
+        super().__init__(preview_text)
+        self.detail_text = detail_text or ""
         self.detail_title = detail_title
         self.table = table
         self.row_frame = row_frame
-        self.lines = max(1, lines)
-        self.compact = compact
-        self.is_elided = False
-        self.setMinimumHeight(28 * self.lines)
+        self.has_detail = bool(self.detail_text.strip())
+        self.setMinimumHeight(28)
         self.setWordWrap(True)
         self.setTextInteractionFlags(Qt.NoTextInteraction)
-        self.refresh_text()
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.refresh_text()
-
-    def refresh_text(self):
-        display_text = self.multiline_elided_text()
-        self.is_elided = display_text != self.full_text
-        self.setText(display_text)
-        self.setToolTip("点击查看完整内容" if self.is_elided else "")
-
-    def multiline_elided_text(self):
-        text = " ".join(self.full_text.split())
-        if not text:
-            return ""
-        if self.compact:
-            return text
-        available_width = max(24, self.width() - 10)
-        font_metrics = self.fontMetrics()
-        words = list(text)
-        lines = []
-        current = ""
-        index = 0
-        while index < len(words) and len(lines) < self.lines:
-            candidate = current + words[index]
-            if font_metrics.horizontalAdvance(candidate) <= available_width or not current:
-                current = candidate
-                index += 1
-            else:
-                lines.append(current)
-                current = ""
-        if current and len(lines) < self.lines:
-            lines.append(current)
-        if index < len(words):
-            if not lines:
-                lines = [""]
-            last = lines[-1]
-            lines[-1] = font_metrics.elidedText(last + "".join(words[index:]), Qt.ElideRight, available_width)
-        return "\n".join(lines)
+        self.setToolTip("点击查看完整内容" if self.has_detail else "")
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.table.select_row(self.row_frame)
-            if self.is_elided and self.full_text.strip():
-                self.table.show_cell_detail(self.detail_title, self.full_text)
+            if self.has_detail:
+                self.table.show_cell_detail(self.detail_title, self.detail_text)
                 event.accept()
                 return
         super().mousePressEvent(event)
@@ -1495,8 +1461,10 @@ class MainWindow(QMainWindow):
 
     def populate_table(self, table, rows):
         table.set_text_color(self.current_text_qcolor())
-        table.set_rows([
-            {
+        table_rows = []
+        for task in rows:
+            notes_preview, notes_detail = preview_text(task["notes"] or "")
+            table_rows.append({
                 "id": task["id"],
                 "status": task["status"],
                 "values": [
@@ -1505,26 +1473,28 @@ class MainWindow(QMainWindow):
                     status_label(task["status"]),
                     task["start_time"] or "",
                     task["end_time"] or "",
-                    task["notes"] or "",
+                    notes_preview,
                 ],
-            }
-            for task in rows
-        ])
+                "details": {5: notes_detail} if notes_detail else {},
+            })
+        table.set_rows(table_rows)
 
     def populate_essay_table(self, rows):
         self.essay_table.set_text_color(self.current_text_qcolor())
-        self.essay_table.set_rows([
-            {
+        table_rows = []
+        for essay in rows:
+            content_preview, content_detail = preview_text(essay["content"] or "")
+            table_rows.append({
                 "id": essay["id"],
                 "status": "",
                 "values": [
                     essay["start_time"],
                     essay["title"] or "无标题",
-                    " ".join((essay["content"] or "").split()),
+                    content_preview,
                 ],
-            }
-            for essay in rows
-        ])
+                "details": {2: content_detail} if content_detail else {},
+            })
+        self.essay_table.set_rows(table_rows)
     def closeEvent(self, event):
         self.settings.setValue("width", self.width())
         self.settings.setValue("height", self.height())
