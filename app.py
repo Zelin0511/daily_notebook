@@ -1484,12 +1484,16 @@ class MainWindow(QMainWindow):
         table_rows = []
         for essay in rows:
             content_preview, content_detail = preview_text(essay["content"] or "")
+            has_ai_response = bool((essay["ai_response"] or "").strip())
+            title = essay["title"] or "无标题"
+            if has_ai_response:
+                title = f"{title} [AI]"
             table_rows.append({
                 "id": essay["id"],
                 "status": "",
                 "values": [
                     essay["start_time"],
-                    essay["title"] or "无标题",
+                    title,
                     content_preview,
                 ],
                 "details": {2: content_detail} if content_detail else {},
