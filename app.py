@@ -856,11 +856,12 @@ class SimpleTable(QWidget):
             frame.setProperty("status", row.get("status", ""))
             frame.setCursor(Qt.PointingHandCursor)
             frame.mousePressEvent = lambda event, f=frame: self.select_row(f)
+            frame.setMinimumHeight(58)
             layout = QGridLayout(frame)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             for col, value in enumerate(row["values"]):
-                label = ElidedLabel(str(value), self.headers[col], self, frame)
+                label = ElidedLabel(str(value), self.headers[col], self, frame, lines=2, compact=len(str(value)) <= 24)
                 label.setAlignment(Qt.AlignVCenter | (Qt.AlignCenter if col and len(str(value)) <= 22 else Qt.AlignLeft))
                 label.setStyleSheet(
                     "border-right: 1px solid rgba(20, 24, 34, 38);"
@@ -899,15 +900,17 @@ class SimpleTable(QWidget):
 
 
 class ElidedLabel(QLabel):
-    def __init__(self, full_text, detail_title, table, row_frame):
+    def __init__(self, full_text, detail_title, table, row_frame, lines=2, compact=False):
         super().__init__()
         self.full_text = full_text or ""
         self.detail_title = detail_title
         self.table = table
         self.row_frame = row_frame
+        self.lines = max(1, lines)
+        self.compact = compact
         self.is_elided = False
-        self.setMinimumHeight(28)
-        self.setWordWrap(False)
+        self.setMinimumHeight(28 * self.lines)
+        self.setWordWrap(True)
         self.setTextInteractionFlags(Qt.NoTextInteraction)
         self.refresh_text()
 
@@ -916,11 +919,39 @@ class ElidedLabel(QLabel):
         self.refresh_text()
 
     def refresh_text(self):
-        available_width = max(8, self.width() - 10)
-        display_text = self.fontMetrics().elidedText(self.full_text, Qt.ElideRight, available_width)
+        display_text = self.multiline_elided_text()
         self.is_elided = display_text != self.full_text
         self.setText(display_text)
         self.setToolTip("点击查看完整内容" if self.is_elided else "")
+
+    def multiline_elided_text(self):
+        text = " ".join(self.full_text.split())
+        if not text:
+            return ""
+        if self.compact:
+            return text
+        available_width = max(24, self.width() - 10)
+        font_metrics = self.fontMetrics()
+        words = list(text)
+        lines = []
+        current = ""
+        index = 0
+        while index < len(words) and len(lines) < self.lines:
+            candidate = current + words[index]
+            if font_metrics.horizontalAdvance(candidate) <= available_width or not current:
+                current = candidate
+                index += 1
+            else:
+                lines.append(current)
+                current = ""
+        if current and len(lines) < self.lines:
+            lines.append(current)
+        if index < len(words):
+            if not lines:
+                lines = [""]
+            last = lines[-1]
+            lines[-1] = font_metrics.elidedText(last + "".join(words[index:]), Qt.ElideRight, available_width)
+        return "\n".join(lines)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
