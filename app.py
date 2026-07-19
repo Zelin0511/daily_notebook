@@ -823,6 +823,20 @@ class SimpleTable(QWidget):
         self.scroll.setWidget(self.body)
         root.addWidget(self.scroll, 1)
 
+    def show_cell_detail(self, title, text):
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.resize(520, 420)
+        layout = QVBoxLayout(dialog)
+        text_edit = QPlainTextEdit()
+        text_edit.setReadOnly(True)
+        text_edit.setPlainText(text)
+        layout.addWidget(text_edit)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+        dialog.exec()
+
     def set_text_color(self, color):
         self.text_color = QColor(color)
         self.refresh_row_styles()
@@ -846,10 +860,8 @@ class SimpleTable(QWidget):
             layout.setContentsMargins(0, 0, 0, 0)
             layout.setSpacing(0)
             for col, value in enumerate(row["values"]):
-                label = QLabel(value)
-                label.setWordWrap(True)
+                label = ElidedLabel(str(value), self.headers[col], self, frame)
                 label.setAlignment(Qt.AlignVCenter | (Qt.AlignCenter if col and len(str(value)) <= 22 else Qt.AlignLeft))
-                label.setMinimumHeight(28)
                 label.setStyleSheet(
                     "border-right: 1px solid rgba(20, 24, 34, 38);"
                     "border-bottom: 1px solid rgba(20, 24, 34, 34);"
@@ -884,6 +896,40 @@ class SimpleTable(QWidget):
                 background = "transparent"
                 color = text
             frame.setStyleSheet(f"QFrame {{ background: {background}; }} QLabel {{ color: {color}; }}")
+
+
+class ElidedLabel(QLabel):
+    def __init__(self, full_text, detail_title, table, row_frame):
+        super().__init__()
+        self.full_text = full_text or ""
+        self.detail_title = detail_title
+        self.table = table
+        self.row_frame = row_frame
+        self.is_elided = False
+        self.setMinimumHeight(28)
+        self.setWordWrap(False)
+        self.setTextInteractionFlags(Qt.NoTextInteraction)
+        self.refresh_text()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.refresh_text()
+
+    def refresh_text(self):
+        available_width = max(8, self.width() - 10)
+        display_text = self.fontMetrics().elidedText(self.full_text, Qt.ElideRight, available_width)
+        self.is_elided = display_text != self.full_text
+        self.setText(display_text)
+        self.setToolTip("点击查看完整内容" if self.is_elided else "")
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.table.select_row(self.row_frame)
+            if self.is_elided and self.full_text.strip():
+                self.table.show_cell_detail(self.detail_title, self.full_text)
+                event.accept()
+                return
+        super().mousePressEvent(event)
 
 
 class MainWindow(QMainWindow):
@@ -1443,7 +1489,7 @@ class MainWindow(QMainWindow):
                 "values": [
                     essay["start_time"],
                     essay["title"] or "无标题",
-                    " ".join((essay["content"] or "").split())[:120],
+                    " ".join((essay["content"] or "").split()),
                 ],
             }
             for essay in rows
