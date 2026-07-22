@@ -968,6 +968,7 @@ class MainWindow(QMainWindow):
         self.tabs = QTabWidget()
         for key, title in [
             ("today", "今天"),
+            ("overdue", "逾期"),
             ("soon", "三天提醒"),
             ("future", "未来"),
             ("done", "已完成"),
@@ -1436,7 +1437,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "设置失败", f"无法修改开机自启动：\n{exc}")
 
     def refresh(self):
-        buckets = {"today": [], "soon": [], "future": [], "done": []}
+        buckets = {"today": [], "overdue": [], "soon": [], "future": [], "done": []}
         today = date.today()
         soon_end = today + timedelta(days=3)
         for task in self.store.list_tasks():
@@ -1446,6 +1447,8 @@ class MainWindow(QMainWindow):
             due = parse_date(task["due_date"])
             if due == today:
                 buckets["today"].append(task)
+            elif due < today:
+                buckets["overdue"].append(task)
             elif today < due <= soon_end:
                 buckets["soon"].append(task)
             else:
